@@ -4,64 +4,78 @@
 <head>
     <title>Blueprint</title>
     <style>
-
+        body {
+            background-color: slategray;
+            color: white;
+        }
     </style>
 </head>
 
 <body>
     <canvas width="400px" height="400px"></canvas>
     <div>
-    <button onclick="startSearch()">Path Find</button>
-    <div>
-        <label>
-            <input type="radio" name="selected-obj" checked>
-            Start
-        </label>
-        <label>
-            <input type="radio" name="selected-obj">
-            End
-        </label>
-        <label>
-            <input type="radio" name="selected-obj">
-            Wall
-        </label>
-        <label>
-            <input type="radio" name="selected-obj">
-            Door
-        </label>
-        <label>
-            <input type="radio" name="selected-obj">
-            Block
-        </label>
-        <label>
-            <input type="radio" name="selected-obj">
-            Stairs
-        </label>
-        <label>
-            <input type="radio" name="selected-obj">
-            Portal
-        </label>
+        <button onclick="startSearch()">Path Find</button>
+        <button onclick="saveMap()">Save Map</button>
+        <select>
+        </select>
+        <div>
+            <label>
+                <input type="radio" name="selected-spr" checked>
+                Start
+            </label>
+            <label>
+                <input type="radio" name="selected-spr">
+                End
+            </label>
+            <label>
+                <input type="radio" name="selected-spr">
+                Wall
+            </label>
+            <label>
+                <input type="radio" name="selected-spr">
+                Door
+            </label>
+            <label>
+                <input type="radio" name="selected-spr">
+                Block
+            </label>
+            <label>
+                <input type="radio" name="selected-spr">
+                Stairs
+            </label>
+            <label>
+                <input type="radio" name="selected-spr">
+                Portal
+            </label>
+        </div>
+        <p></p>
     </div>
-</div>
     <script>
         const canvas = document.querySelector("canvas");
         const xmax = canvas.offsetWidth;
         const ymax = canvas.offsetHeight;
         const ctx = canvas.getContext("2d");
-        const cell = 20;
+        const cell = 40;
         const fps = 20;
         setInterval(update, 1000 / fps);
 
 
+        let savedmaps = localStorage.getItem("BluePrint-maps");
+        if (savedmaps) {
+            savedmaps = JSON.parse(savedmaps)
+        } else {
+            savedmaps = {};
+        }
 
         let lines = [];
 
         let endPoint = [];
-        let paths = [[[cell / 4, cell / 4]]];
-        let canFindPath = false;
+        let startPoint = [];
+        let paths = [] //[[startPoint]];
+        let neonPathIndex = 0;
 
         let walls = [];
-        let willPlaceWall = false;
+        let selectedSprite = "start";
 
         let mx, my, blockx, blocky;
         let fixedPoint = [];
@@ -72,47 +86,44 @@
             blocky = my - (my % cell);
         })
         canvas.addEventListener("click", () => {
-            if (fixedPoint.length) {
-                lines.push([fixedPoint[0], fixedPoint[1], mx, my]);
-                fixedPoint = [];
-            } else {
-                fixedPoint = [mx, my];
+            switch (selectedSprite) {
+                case "wall":
+                    const wallPos = getWallPos()
+                    let overlap = false;
+                    const wallsClone = [...walls];
+                    for (let wi in wallsClone) {
+                        const w = walls[wi];
+                        if (
+                            w[0] == wallPos[0] && w[1] == wallPos[1]
+                            &&
+                            w[2] == wallPos[2] && w[3] == wallPos[3]
+                        ) {
+                            overlap = true;
+                            walls = walls.filter((w_, i) => i != wi);
+                            break;
+                        }
+                    }
+                    if (!overlap) {
+                        walls.push(wallPos);
+                    }
+                    break;
+                case "start":
+                    startPoint = [blockx + cell / 4, blocky + cell / 4]
+                    break;
+                case "end":
+                    endPoint = [blockx + cell / 4, blocky + cell / 4]
+                    break;
             }
-            willPlaceWall = true;
         })
-        function startSearch() {
-            if (canFindPath) {
-                return;
-            }
-            setTimeout(() => {
-                blockx = mx - (mx % cell);
-                blocky = my - (my % cell);
-                endPoint = [blockx + cell / 4, blocky + cell / 4];
-            }, 3000)
-            canFindPath = true;
-        }
-
-        function update() {
-            ctx.fillStyle = "black";
-            ctx.fillRect(0, 0, xmax, ymax);
-            // after refresh
-            for (let i=(blockx/cell); i<=(blockx/cell)+1; i++){
-                drawLine(i*cell, blocky-1*cell, i*cell, blocky+2*cell, "white", 1)
-            }
-            for (let i=(blocky/cell); i<=(blocky/cell)+1; i++){
-                drawLine(blockx-1*cell, i*cell, blockx+2*cell, i*cell, "white", 1)
-            }
-            
-            // for (let l of lines){
-            //     drawLine(l[0], l[1], l[2], l[3]);
-            // }
-            for (let w of walls) {
-                drawWall(w[0], w[1], w[2], w[3]);
-            }
-            for (let p of paths) {
-                drawPoints(p);
-            }
-
+        console.log(document.querySelector("input[type='radio']"));
+        document.querySelectorAll("input[name='selected-spr']").forEach(el => {
+            el.addEventListener("change", (e) => {
+                if (e.target.checked) {
+                    selectedSprite = e.target.parentElement.textContent.trim().toLowerCase();
+                }
+            })
+        })
+        function getWallPos() {
             // drawing wall
             let t = distance(mx, my, blockx + cell / 2, blocky);
             let r = distance(mx, my, blockx + cell, blocky + cell / 2);
@@ -134,159 +145,211 @@
                     wallPos = [blockx, blocky, blockx, blocky + cell];
                     break;
             }
-            drawWallZone(wallPos[0], wallPos[1], wallPos[2], wallPos[3]);
-            if (willPlaceWall) {
-                willPlaceWall = false;
-                let overlap = false;
-                const wallsClone = [...walls];
-                for (let wi in wallsClone) {
-                    const w = walls[wi];
-                    if (
-                        w[0] == wallPos[0] && w[1] == wallPos[1]
-                        &&
-                        w[2] == wallPos[2] && w[3] == wallPos[3]
-                    ) {
-                        overlap = true;
-                        walls = walls.filter((w_, i) => i != wi);
-                        break;
-                    }
-                }
-                if (!overlap) {
-                    walls.push(wallPos);
-                }
+            return wallPos;
+        }
+        function saveMap() {
+            const newMap = {
+                "start": startPoint,
+                "end": endPoint,
+                "walls": walls
             }
-
+            savedmaps[prompt("Map title: ")] = newMap;
+            localStorage.setItem(
+                "BluePrint-maps",
+                JSON.stringify(savedmaps)
+            );
+            document.querySelector("p").textContent = JSON.stringify(newMap);
+        }
+        function startSearch() {
+            paths = findPath([[startPoint]]);
+        }
+        function findPath(paths) {
             // path finding
-            if (endPoint.length && canFindPath) {
-                ctx.fillStyle = "yellow";
-                ctx.fillRect(endPoint[0], endPoint[1], cell / 2, cell / 2);
-
-                let newPaths = [];
-                let pathExists = false;
-                for (let p of paths) {
-                    const head = p[p.length - 1];
-                    let heads = [
-                        [head[0] - cell, head[1]],
-                        [head[0] + cell, head[1]],
-                        [head[0], head[1] + cell],
-                        [head[0], head[1] - cell]
-                    ];
-                    // wall collision
-                    let x, y;
-                    if (heads[1] != undefined) {
-                        x = heads[1][0] - cell / 4
-                        y = heads[1][1] - cell / 4
-                        for (let w of walls) {
-                            if (x == w[0] && y == w[1] && x == w[2] && y + cell == w[3]) {
-                                delete heads[1]
-                                break
-                            }
-                        }
-                    } if (heads[0] != undefined) {
-                        x = heads[0][0] + 3 * cell / 4
-                        y = heads[0][1] - cell / 4
-                        for (let w of walls) {
-                            if (x == w[0] && y == w[1] && x == w[2] && y + cell == w[3]) {
-                                delete heads[0]
-                                break
-                            }
-                        }
-                    } if (heads[3] != undefined) {
-                        x = heads[3][0] - cell / 4
-                        y = heads[3][1] + 3 * cell / 4
-                        for (let w of walls) {
-                            if (x == w[0] && y == w[1] && x + cell == w[2] && y == w[3]) {
-                                delete heads[3]
-                                break
-                            }
-                        }
-                    } if (heads[2] != undefined) {
-                        x = heads[2][0] - cell / 4;
-                        y = heads[2][1] - cell / 4
-                        for (let w of walls) {
-                            if (x == w[0] && y == w[1] && x + cell == w[2] && y == w[3]) {
-                                delete heads[2]
-                                break
-                            }
+            let newPaths = [];
+            let pathExists = false;
+            for (let p of paths) {
+                const head = p[p.length - 1];
+                let heads = [
+                    [head[0] - cell, head[1]],
+                    [head[0] + cell, head[1]],
+                    [head[0], head[1] + cell],
+                    [head[0], head[1] - cell]
+                ];
+                // wall collision
+                let x, y;
+                if (heads[1] != undefined) {
+                    x = heads[1][0] - cell / 4
+                    y = heads[1][1] - cell / 4
+                    for (let w of walls) {
+                        if (x == w[0] && y == w[1] && x == w[2] && y + cell == w[3]) {
+                            delete heads[1]
+                            break
                         }
                     }
-                    heads = heads.filter(h => h != undefined)
+                } if (heads[0] != undefined) {
+                    x = heads[0][0] + 3 * cell / 4
+                    y = heads[0][1] - cell / 4
+                    for (let w of walls) {
+                        if (x == w[0] && y == w[1] && x == w[2] && y + cell == w[3]) {
+                            delete heads[0]
+                            break
+                        }
+                    }
+                } if (heads[3] != undefined) {
+                    x = heads[3][0] - cell / 4
+                    y = heads[3][1] + 3 * cell / 4
+                    for (let w of walls) {
+                        if (x == w[0] && y == w[1] && x + cell == w[2] && y == w[3]) {
+                            delete heads[3]
+                            break
+                        }
+                    }
+                } if (heads[2] != undefined) {
+                    x = heads[2][0] - cell / 4;
+                    y = heads[2][1] - cell / 4
+                    for (let w of walls) {
+                        if (x == w[0] && y == w[1] && x + cell == w[2] && y == w[3]) {
+                            delete heads[2]
+                            break
+                        }
+                    }
+                }
+                heads = heads.filter(h => h != undefined)
 
-                    // target collision
-                    let success = false;
-                    for (let i = 0; i < heads.length; i++) {
-                        if (heads[i][0] == endPoint[0] && heads[i][1] == endPoint[1]) {
-                            success = true;
-                            if (pathExists) {
-                                if (p.length < newPaths[0].length) {
-                                    newPaths = [p];
-                                }
-                            } else {
+                // target collision
+                let success = false;
+                for (let i = 0; i < heads.length; i++) {
+                    if (heads[i][0] == endPoint[0] && heads[i][1] == endPoint[1]) {
+                        success = true;
+                        if (pathExists) {
+                            if (p.length < newPaths[0].length) {
                                 newPaths = [p];
-                                pathExists = true;
                             }
+                        } else {
+                            newPaths = [p];
+                            pathExists = true;
                         }
                     }
-                    if (pathExists) {
+                }
+                if (pathExists) {
+                    continue
+                }
+
+                // collision, bouncing, success
+                for (let i = 0; i < heads.length; i++) {
+                    if (
+                        heads[i][0] < 0 || heads[i][0] > xmax
+                        ||
+                        heads[i][1] < 0 || heads[i][1] > ymax
+                    ) {
+                        delete heads[i];
+                        continue;
+                    }
+
+                    let collided = false;
+                    for (let pa of paths) {
+                        for (let point of pa) {
+                            if (heads[i][0] == point[0] && heads[i][1] == point[1]) {
+                                delete heads[i]
+                                collided = true
+                                break
+                            }
+                        }
+                        if (collided) {
+                            break
+                        }
+                    }
+                    if (collided) {
                         continue
                     }
-
-                    // collision, bouncing, success
-                    for (let i = 0; i < heads.length; i++) {
-                        if (
-                            heads[i][0] < 0 || heads[i][0] > xmax
-                            ||
-                            heads[i][1] < 0 || heads[i][1] > ymax
-                        ) {
-                            delete heads[i];
-                            continue;
-                        }
-
-                        let collided = false;
-                        for (let pa of paths) {
-                            for (let point of pa) {
-                                if (heads[i][0] == point[0] && heads[i][1] == point[1]) {
-                                    delete heads[i]
-                                    collided = true
-                                    break
-                                }
-                            }
-                            if (collided) {
+                    collided = false;
+                    for (let pa of newPaths) {
+                        for (let point of pa) {
+                            if (heads[i][0] == point[0] && heads[i][1] == point[1]) {
+                                delete heads[i]
+                                collided = true
                                 break
                             }
                         }
                         if (collided) {
-                            continue
-                        }
-                        collided = false;
-                        for (let pa of newPaths) {
-                            for (let point of pa) {
-                                if (heads[i][0] == point[0] && heads[i][1] == point[1]) {
-                                    delete heads[i]
-                                    collided = true
-                                    break
-                                }
-                            }
-                            if (collided) {
-                                break
-                            }
-                        }
-                        if (collided) {
-                            continue
+                            break
                         }
                     }
-
-                    heads = heads.filter(h => h != undefined)
-                    for (let h of heads) {
-                        newPaths.push([...p, h])
+                    if (collided) {
+                        continue
                     }
                 }
-                paths = newPaths;
+
+                heads = heads.filter(h => h != undefined)
+                for (let h of heads) {
+                    newPaths.push([...p, h])
+                }
             }
+            // if paths != newpaths: stop recursion
+            let areDifferent = false;
+            if (paths.length == newPaths.length) {
+                for (let i in paths) {
+                    for (let j in paths[i]) {
+                        for (let k in paths[i][j]) {
+                            if (paths[i][j][k] != newPaths[i][j][k]) {
+                                areDifferent = true;
+                                break
+                            }
+                        }
+                        if (areDifferent) break
+                    }
+                    if (areDifferent) break
+                }
+            } else {
+                areDifferent = true;
+            }
+
+            if (areDifferent) {
+                return findPath(newPaths);
+            }
+            return paths;
+        }
+
+        function update() {
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, xmax, ymax);
+            // after refresh
+            for (let i = (blockx / cell); i <= (blockx / cell) + 1; i++) {
+                drawLine(i * cell, blocky - 1 * cell, i * cell, blocky + 2 * cell, "white", 1)
+            }
+            for (let i = (blocky / cell); i <= (blocky / cell) + 1; i++) {
+                drawLine(blockx - 1 * cell, i * cell, blockx + 2 * cell, i * cell, "white", 1)
+            }
+
+            // for (let l of lines){
+            //     drawLine(l[0], l[1], l[2], l[3]);
+            // }
+            for (let w of walls) {
+                drawWall(w[0], w[1], w[2], w[3]);
+            }
+
+            if (paths.length){
+                drawPoints(paths[0]);
+                drawTargetCircle()
+            }
+
+            if (startPoint.length) {
+                ctx.fillStyle = "greenyellow";
+                ctx.fillRect(startPoint[0], startPoint[1], cell / 2, cell / 2);
+            }
+            if (endPoint.length) {
+                ctx.fillStyle = "yellow";
+                ctx.fillRect(endPoint[0], endPoint[1], cell / 2, cell / 2);
+            }
+            if (selectedSprite == "wall") {
+                drawWallZone()
+            }
+
+
         }
 
 
-        function drawLine(x1, y1, x2, y2, c="white", w=1) {
+        function drawLine(x1, y1, x2, y2, c = "white", w = 1) {
             ctx.strokeStyle = c;
             ctx.lineWidth = w;
             // Define a new Path:
@@ -304,15 +367,30 @@
         function drawWall(x1, y1, x2, y2) {
             drawLine(x1, y1, x2, y2, "cyan", 4);
         }
-        function drawWallZone(x1, y1, x2, y2){
-            drawLine(x1-4, y1-4, x2+4, y1-4, "red");
-            drawLine(x1-4, y2+4, x2+4, y2+4, "red");
-            drawLine(x1-4, y1-4, x1-4, y2+4, "red");
-            drawLine(x2+4, y1-4, x2+4, y2+4, "red");
+        function drawWallZone() {
+            let [x1, y1, x2, y2] = [...getWallPos()];
+            drawLine(x1 - 4, y1 - 4, x2 + 4, y1 - 4, "red");
+            drawLine(x1 - 4, y2 + 4, x2 + 4, y2 + 4, "red");
+            drawLine(x1 - 4, y1 - 4, x1 - 4, y2 + 4, "red");
+            drawLine(x2 + 4, y1 - 4, x2 + 4, y2 + 4, "red");
+        }
+        function drawTargetCircle() {
+            const ratio = neonPathIndex / paths[0].length;
+            ctx.strokeStyle = "white";
+            ctx.beginPath();
+            // ctx.arc(endPoint[0]+cell/4, endPoint[1]+cell/4, 1.5*cell*ratio, 0, 2 * Math.PI);
+            ctx.rect((endPoint[0]+cell/4)-(cell*2*ratio)/2, (endPoint[1]+cell/4)-(cell*2*ratio)/2, cell*2*ratio, cell*2*ratio)
+            ctx.stroke();
         }
         function drawPoints(points) {
-            for (let [x, y] of points) {
+            neonPathIndex += 0.5
+            neonPathIndex %= paths[0].length;
+            for (let i in points) {
+                if (i == Math.floor(neonPathIndex)) {
+                    continue
+                }
                 ctx.fillStyle = "red";
+                const [x, y] = points[i];
                 ctx.fillRect(x, y, cell / 2, cell / 2);
             }
         }

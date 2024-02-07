@@ -7,17 +7,25 @@
         body {
             background-color: slategray;
             color: white;
+            width: fit-content;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin: 0;
         }
     </style>
 </head>
 
 <body>
-    <canvas width="400px" height="400px"></canvas>
+    <h1>MAP</h1>
+    <canvas width="1200px" height="512px"></canvas>
     <div>
-        <button onclick="startSearch()">Path Find</button>
-        <button onclick="saveMap()">Save Map</button>
-        <select>
+        <select id="map">
         </select>
+        <button onclick="saveMap()">Save Path</button>
+        <button onclick="startSearch()">Path Find</button>
         <div>
             <label>
                 <input type="radio" name="selected-spr" checked>
@@ -37,27 +45,19 @@
             </label>
             <label>
                 <input type="radio" name="selected-spr">
-                Block
-            </label>
-            <label>
-                <input type="radio" name="selected-spr">
-                Stairs
-            </label>
-            <label>
-                <input type="radio" name="selected-spr">
-                Portal
+                Stair
             </label>
         </div>
         <p></p>
     </div>
     <script>
         const canvas = document.querySelector("canvas");
-        const xmax = canvas.offsetWidth;
-        const ymax = canvas.offsetHeight;
         const ctx = canvas.getContext("2d");
-        const cell = 40;
+
+        const cell = 32;
+        const xmax = canvas.offsetWidth / cell;
+        const ymax = canvas.offsetHeight / cell;
         const fps = 20;
-        setInterval(update, 1000 / fps);
 
 
         let savedmaps = localStorage.getItem("BluePrint-maps");
@@ -66,6 +66,7 @@
         } else {
             savedmaps = {};
         }
+        refreshMenu();
 
         let lines = [];
 
@@ -75,10 +76,11 @@
         let neonPathIndex = 0;
 
         let walls = [];
+        let stairs = [];
+        let doors = [];
         let selectedSprite = "start";
 
         let mx, my, blockx, blocky;
-        let fixedPoint = [];
         canvas.addEventListener("mousemove", (e) => {
             mx = e.clientX - canvas.getBoundingClientRect().left;
             my = e.clientY - canvas.getBoundingClientRect().top;
@@ -99,7 +101,7 @@
                             w[2] == wallPos[2] && w[3] == wallPos[3]
                         ) {
                             overlap = true;
-                            walls = walls.filter((w_, i) => i != wi);
+                            walls = walls.filter((_, i) => i != wi);
                             break;
                         }
                     }
@@ -107,15 +109,74 @@
                         walls.push(wallPos);
                     }
                     break;
+                case "stair":
+                    const stairPos = [blockx / cell, blocky / cell];
+                    let overlap_ = false;
+                    const stairsClone = [...stairs];
+                    for (let si in stairsClone) {
+                        const s = stairs[si];
+                        if (s[0] == stairPos[0] && s[1] == stairPos[1]) {
+                            overlap_ = true;
+                            stairs = stairs.filter((_, i) => i != si);
+                            break;
+                        }
+                    }
+                    if (!overlap_) {
+                        stairs.push(stairPos);
+                    }
+                    break;
+                case "door":
+                    const doorPos = getWallPos();
+                    let overlap__ = false;
+                    const doorsClone = [...doors];
+                    for (let di in doorsClone) {
+                        const d = doors[di];
+                        if (
+                            d[0] == doorPos[0] && d[1] == doorPos[1]
+                            &&
+                            d[2] == doorPos[2] && d[3] == doorPos[3]
+                        ) {
+                            overlap__ = true;
+                            doors = doors.filter((_, i) => i != di);
+                            break;
+                        }
+                    }
+                    if (!overlap__) {
+                        let doorconfig = prompt("Door configuration [0-1|0-1]: ");
+                        const fixedSide = Number(doorconfig[0]);
+                        const openSide = Number(doorconfig[1]);
+                        if (![0, 1].includes(fixedSide) || ![0, 1].includes(openSide)) break
+                        doors.push([...doorPos, fixedSide, openSide]);
+                    }
+                    break;
                 case "start":
-                    startPoint = [blockx + cell / 4, blocky + cell / 4]
+                    startPoint = [blockx / cell, blocky / cell]
                     break;
                 case "end":
-                    endPoint = [blockx + cell / 4, blocky + cell / 4]
+                    endPoint = [blockx / cell, blocky / cell]
                     break;
             }
         })
-        console.log(document.querySelector("input[type='radio']"));
+
+        document.getElementById("map").addEventListener("change", (e) => {
+            document.querySelector("h1").textContent = e.target.value;
+            const selectedMap = savedmaps[e.target.value];
+            paths = [];
+            if (e.target.value == '') {
+                endPoint = [];
+                startPoint = [];
+                walls = [];
+                doors = [];
+                stairs = [];
+                return;
+            }
+            endPoint = selectedMap.end;
+            startPoint = selectedMap.start;
+            walls = selectedMap.walls;
+            doors = selectedMap.doors;
+            stairs = selectedMap.stairs;
+        })
+
         document.querySelectorAll("input[name='selected-spr']").forEach(el => {
             el.addEventListener("change", (e) => {
                 if (e.target.checked) {
@@ -123,35 +184,16 @@
                 }
             })
         })
-        function getWallPos() {
-            // drawing wall
-            let t = distance(mx, my, blockx + cell / 2, blocky);
-            let r = distance(mx, my, blockx + cell, blocky + cell / 2);
-            let b = distance(mx, my, blockx + cell / 2, blocky + cell);
-            let l = distance(mx, my, blockx, blocky + cell / 2);
 
-            let wallPos = [];
-            switch (Math.min(t, r, b, l)) {
-                case t:
-                    wallPos = [blockx, blocky, blockx + cell, blocky];
-                    break;
-                case r:
-                    wallPos = [blockx + cell, blocky, blockx + cell, blocky + cell];
-                    break;
-                case b:
-                    wallPos = [blockx, blocky + cell, blockx + cell, blocky + cell];
-                    break;
-                case l:
-                    wallPos = [blockx, blocky, blockx, blocky + cell];
-                    break;
-            }
-            return wallPos;
-        }
+        setInterval(update, 1000 / fps);
+
         function saveMap() {
             const newMap = {
                 "start": startPoint,
                 "end": endPoint,
-                "walls": walls
+                "walls": walls,
+                "doors": doors,
+                "stairs": stairs
             }
             savedmaps[prompt("Map title: ")] = newMap;
             localStorage.setItem(
@@ -160,9 +202,55 @@
             );
             document.querySelector("p").textContent = JSON.stringify(newMap);
         }
+
+        function removePath(pathName) {
+            let cleaner = {};
+            for (let k in savedmaps) {
+                if (k == pathName) continue;
+                cleaner[k] = savedmaps[k];
+            }
+            savedmaps = cleaner;
+
+            localStorage.setItem(
+                "BluePrint-maps",
+                JSON.stringify(savedmaps)
+            );
+        }
+
+        function getWallPos() {
+            // drawing wall
+            const t = distance(mx, my, blockx + cell / 2, blocky);
+            const r = distance(mx, my, blockx + cell, blocky + cell / 2);
+            const b = distance(mx, my, blockx + cell / 2, blocky + cell);
+            const l = distance(mx, my, blockx, blocky + cell / 2);
+
+            let wallPos = [];
+            const wallx = blockx / cell;
+            const wally = blocky / cell;
+            switch (Math.min(t, r, b, l)) {
+                case t:
+                    wallPos = [wallx, wally, wallx + 1, wally];
+                    break;
+                case r:
+                    wallPos = [wallx + 1, wally, wallx + 1, wally + 1];
+                    break;
+                case b:
+                    wallPos = [wallx, wally + 1, wallx + 1, wally + 1];
+                    break;
+                case l:
+                    wallPos = [wallx, wally, wallx, wally + 1];
+                    break;
+            }
+            return wallPos;
+        }
+
         function startSearch() {
+            if (endPoint.length == 0 || startPoint.length == 0) {
+                return
+            }
             paths = findPath([[startPoint]]);
         }
+
         function findPath(paths) {
             // path finding
             let newPaths = [];
@@ -170,45 +258,45 @@
             for (let p of paths) {
                 const head = p[p.length - 1];
                 let heads = [
-                    [head[0] - cell, head[1]],
-                    [head[0] + cell, head[1]],
-                    [head[0], head[1] + cell],
-                    [head[0], head[1] - cell]
+                    [head[0] - 1, head[1]],
+                    [head[0] + 1, head[1]],
+                    [head[0], head[1] + 1],
+                    [head[0], head[1] - 1]
                 ];
                 // wall collision
                 let x, y;
                 if (heads[1] != undefined) {
-                    x = heads[1][0] - cell / 4
-                    y = heads[1][1] - cell / 4
+                    x = heads[1][0]
+                    y = heads[1][1]
                     for (let w of walls) {
-                        if (x == w[0] && y == w[1] && x == w[2] && y + cell == w[3]) {
+                        if (x == w[0] && y == w[1] && x == w[2] && y + 1 == w[3]) {
                             delete heads[1]
                             break
                         }
                     }
                 } if (heads[0] != undefined) {
-                    x = heads[0][0] + 3 * cell / 4
-                    y = heads[0][1] - cell / 4
+                    x = heads[0][0] + 1;
+                    y = heads[0][1]
                     for (let w of walls) {
-                        if (x == w[0] && y == w[1] && x == w[2] && y + cell == w[3]) {
+                        if (x == w[0] && y == w[1] && x == w[2] && y + 1 == w[3]) {
                             delete heads[0]
                             break
                         }
                     }
                 } if (heads[3] != undefined) {
-                    x = heads[3][0] - cell / 4
-                    y = heads[3][1] + 3 * cell / 4
+                    x = heads[3][0]
+                    y = heads[3][1] + 1;
                     for (let w of walls) {
-                        if (x == w[0] && y == w[1] && x + cell == w[2] && y == w[3]) {
+                        if (x == w[0] && y == w[1] && x + 1 == w[2] && y == w[3]) {
                             delete heads[3]
                             break
                         }
                     }
                 } if (heads[2] != undefined) {
-                    x = heads[2][0] - cell / 4;
-                    y = heads[2][1] - cell / 4
+                    x = heads[2][0];
+                    y = heads[2][1]
                     for (let w of walls) {
-                        if (x == w[0] && y == w[1] && x + cell == w[2] && y == w[3]) {
+                        if (x == w[0] && y == w[1] && x + 1 == w[2] && y == w[3]) {
                             delete heads[2]
                             break
                         }
@@ -235,7 +323,7 @@
                     continue
                 }
 
-                // collision, bouncing, success
+                // collision, bouncing
                 for (let i = 0; i < heads.length; i++) {
                     if (
                         heads[i][0] < 0 || heads[i][0] > xmax
@@ -247,8 +335,8 @@
                     }
 
                     let collided = false;
-                    for (let pa of paths) {
-                        for (let point of pa) {
+                    for (let p_ of paths) {
+                        for (let point of p_) {
                             if (heads[i][0] == point[0] && heads[i][1] == point[1]) {
                                 delete heads[i]
                                 collided = true
@@ -263,8 +351,8 @@
                         continue
                     }
                     collided = false;
-                    for (let pa of newPaths) {
-                        for (let point of pa) {
+                    for (let p_ of newPaths) {
+                        for (let point of p_) {
                             if (heads[i][0] == point[0] && heads[i][1] == point[1]) {
                                 delete heads[i]
                                 collided = true
@@ -289,6 +377,10 @@
             let areDifferent = false;
             if (paths.length == newPaths.length) {
                 for (let i in paths) {
+                    if (paths[i].length != newPaths[i].length) {
+                        areDifferent = true;
+                        break;
+                    }
                     for (let j in paths[i]) {
                         for (let k in paths[i][j]) {
                             if (paths[i][j][k] != newPaths[i][j][k]) {
@@ -312,7 +404,7 @@
 
         function update() {
             ctx.fillStyle = "black";
-            ctx.fillRect(0, 0, xmax, ymax);
+            ctx.fillRect(0, 0, xmax * cell, ymax * cell);
             // after refresh
             for (let i = (blockx / cell); i <= (blockx / cell) + 1; i++) {
                 drawLine(i * cell, blocky - 1 * cell, i * cell, blocky + 2 * cell, "white", 1)
@@ -324,30 +416,35 @@
             // for (let l of lines){
             //     drawLine(l[0], l[1], l[2], l[3]);
             // }
-            for (let w of walls) {
-                drawWall(w[0], w[1], w[2], w[3]);
-            }
-
-            if (paths.length){
+            if (paths.length) {
                 drawPoints(paths[0]);
                 drawTargetCircle()
             }
 
+            for (let d of doors) {
+                drawDoor(d[0], d[1], d[2], d[3], d[4], d[5]);
+            }
+            for (let s of stairs) {
+                drawStair(s[0], s[1]);
+            }
+            for (let w of walls) {
+                drawWall(w[0], w[1], w[2], w[3]);
+            }
+
             if (startPoint.length) {
-                ctx.fillStyle = "greenyellow";
-                ctx.fillRect(startPoint[0], startPoint[1], cell / 2, cell / 2);
+                ctx.fillStyle = "yellow";
+                ctx.fillRect(startPoint[0] * cell + cell / 4, startPoint[1] * cell + cell / 4, cell / 2, cell / 2);
             }
             if (endPoint.length) {
-                ctx.fillStyle = "yellow";
-                ctx.fillRect(endPoint[0], endPoint[1], cell / 2, cell / 2);
+                ctx.fillStyle = "white";
+                ctx.fillRect(endPoint[0] * cell + cell / 4, endPoint[1] * cell + cell / 4, cell / 2, cell / 2);
             }
-            if (selectedSprite == "wall") {
+            if (["wall", "door"].includes(selectedSprite)) {
                 drawWallZone()
             }
 
 
         }
-
 
         function drawLine(x1, y1, x2, y2, c = "white", w = 1) {
             ctx.strokeStyle = c;
@@ -364,39 +461,100 @@
             // Stroke it (Do the Drawing)
             ctx.stroke();
         }
+
         function drawWall(x1, y1, x2, y2) {
-            drawLine(x1, y1, x2, y2, "cyan", 4);
+            drawLine(x1 * cell, y1 * cell, x2 * cell, y2 * cell, "cyan", 4);
         }
+
+        function drawDoor(x1, y1, x2, y2, fixedSide, openSide) {
+            const doorx = Math.max(x1 * fixedSide, Math.abs(x2 * (fixedSide - 1)));
+            const doory = Math.max(y1 * fixedSide, Math.abs(y2 * (fixedSide - 1)));
+            const edgex = doorx == x1 ? x2 : x1;
+            const edgey = doory == y1 ? y2 : y1;
+            const offsetAngle = Math.atan2(doorx - edgex, doory - edgey) + ((doory == edgey) ? 1 : -1) * 0.5 * Math.PI;
+
+            if ((neonPathIndex % 8) > 4) {
+                drawLine(
+                    doorx * cell,
+                    doory * cell,
+                    edgex * cell,
+                    edgey * cell,
+                    "palegreen",
+                    3
+                );
+            } else {
+                drawLine(
+                    doorx * cell,
+                    doory * cell,
+                    doorx * cell + (Math.cos(((30 - openSide * 60) / 180) * Math.PI + offsetAngle) * cell),
+                    doory * cell + (Math.sin(((30 - openSide * 60) / 180) * Math.PI + offsetAngle) * cell),
+                    "palegreen",
+                    3
+                );
+                ctx.lineWidth = 1;
+                ctx.strokeStyle = "white";
+                ctx.beginPath();
+                ctx.arc(doorx * cell, doory * cell, cell, offsetAngle - openSide * (1 / 6) * Math.PI, offsetAngle + (1 * (Math.abs(openSide - 1)) / 6) * Math.PI);
+                ctx.stroke();
+
+            }
+        }
+
+        function drawStair(x, y) {
+            for (let i = 0; i <= 4; i++) {
+                drawLine(x * cell, y * cell + (i * cell / 4), (x + 1) * cell, y * cell + (i * cell / 4), "white", 1);
+            }
+        }
+
         function drawWallZone() {
             let [x1, y1, x2, y2] = [...getWallPos()];
+            x1 *= cell;
+            y1 *= cell;
+            x2 *= cell;
+            y2 *= cell;
             drawLine(x1 - 4, y1 - 4, x2 + 4, y1 - 4, "red");
             drawLine(x1 - 4, y2 + 4, x2 + 4, y2 + 4, "red");
             drawLine(x1 - 4, y1 - 4, x1 - 4, y2 + 4, "red");
             drawLine(x2 + 4, y1 - 4, x2 + 4, y2 + 4, "red");
         }
+
         function drawTargetCircle() {
             const ratio = neonPathIndex / paths[0].length;
+            ctx.lineWidth = 1;
             ctx.strokeStyle = "white";
             ctx.beginPath();
-            // ctx.arc(endPoint[0]+cell/4, endPoint[1]+cell/4, 1.5*cell*ratio, 0, 2 * Math.PI);
-            ctx.rect((endPoint[0]+cell/4)-(cell*2*ratio)/2, (endPoint[1]+cell/4)-(cell*2*ratio)/2, cell*2*ratio, cell*2*ratio)
+            ctx.arc(endPoint[0] * cell + cell / 2, endPoint[1] * cell + cell / 2, 1.5 * cell * ratio, 0, 2 * Math.PI);
+            // ctx.rect((endPoint[0]*cell + cell / 2) - (cell * 2 * ratio) / 2, (endPoint[1]*cell + cell / 2) - (cell * 2 * ratio) / 2, cell * 2 * ratio, cell * 2 * ratio)
             ctx.stroke();
         }
+
         function drawPoints(points) {
             neonPathIndex += 0.5
             neonPathIndex %= paths[0].length;
+
+            ctx.fillStyle = "red";
             for (let i in points) {
-                if (i == Math.floor(neonPathIndex)) {
-                    continue
-                }
-                ctx.fillStyle = "red";
                 const [x, y] = points[i];
-                ctx.fillRect(x, y, cell / 2, cell / 2);
+                if (i == Math.floor(neonPathIndex)) {
+                    ctx.fillRect(x * cell, y * cell, cell, cell);
+                } else {
+                    ctx.fillRect(x * cell + (cell / 3), y * cell + (cell / 3), cell / 3, cell / 3);
+                }
             }
         }
+
         function distance(x1, y1, x2, y2) {
             return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
         }
+
+        function refreshMenu() {
+            let newHTML = '<option value=\'\'>Blank</option>';
+            for (let mapTitle of Object.keys(savedmaps)) {
+                newHTML += `<option>${mapTitle}</option>`
+            }
+            document.getElementById("map").innerHTML = newHTML;
+        }
+
     </script>
 </body>
 
